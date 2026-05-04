@@ -1,7 +1,5 @@
 import "./kaboom.js"
 
-import "./main.js"
-
 
 
 loadSprite("salt", "/sprites/salt.png")
@@ -55,6 +53,13 @@ const CHILD_SPEED = 250
 
 var death = ""
 var checkpoint = 1
+const UI_FONT = "monospace"
+const FLOOR_SCALE = 0.62
+const FLOOR_COLLIDER_WIDTH = 104 * FLOOR_SCALE
+const FLOOR_COLLIDER_HEIGHT = 121 * FLOOR_SCALE
+const PLAYER_BODY_WIDTH = 28
+const PLAYER_BODY_HEIGHT = 18
+const PLAYER_SPRITE_SCALE = 1.1
 
 
 const LEVELS = [
@@ -122,7 +127,37 @@ const LEVELS = [
     // ],
 ]
 
-scene("game", ({ levelIdx, score }) => {
+scene("game", ({ levelIdx = 0, score = 0 } = {}) => {
+    const currentLevelIdx = Math.max(0, Math.min(levelIdx, LEVELS.length - 1))
+    const tileWidth = 64
+    const tileHeight = 64
+    const levelOrigin = vec2(100, 200)
+    const currentLevel = LEVELS[currentLevelIdx]
+    const spawnRow = currentLevel.findIndex((row) => row.includes("@"))
+    const spawnCol = spawnRow >= 0 ? currentLevel[spawnRow].indexOf("@") : 0
+    const levelLayout = currentLevel.map((row) => row.replace("@", " "))
+
+    function spawnStaticCollider(col, row, tag) {
+        const isFloor = tag === "floor"
+        add([
+            rect(
+                isFloor ? FLOOR_COLLIDER_WIDTH : tileWidth,
+                isFloor ? FLOOR_COLLIDER_HEIGHT : tileHeight,
+            ),
+            pos(
+                levelOrigin.x + col * tileWidth,
+                isFloor
+                    ? levelOrigin.y + (row + 1) * tileHeight
+                    : levelOrigin.y + row * tileHeight,
+            ),
+            anchor(isFloor ? "botleft" : "topleft"),
+            area(),
+            body({ isStatic: true }),
+            opacity(0),
+            tag,
+        ])
+    }
+
     var background = (x, y) => {
         add([
 
@@ -138,14 +173,14 @@ scene("game", ({ levelIdx, score }) => {
     background(4000, -70)
 
 
-    if (levelIdx == 0) {
+    if (currentLevelIdx == 0) {
         add([
             pos(0, 0),
 
             text("Ah yes you have awoken. Due to your horrible karma in your previous life, you have been reborn as a sentient pretzel. Your objective is to escape the haunted bakery, which could be your grave, while saving your salt friends from this haunted place.", {
                 width: 600,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             }),
         ])
 
@@ -154,6 +189,7 @@ scene("game", ({ levelIdx, score }) => {
             text("GOD MODE! Press 'c' to go into god mode. In god mode you can fly, move faster, be invincible, explore the level, and switch between different levels. The keys are up, left, right, and down arrows which makes you move resectivly. Press 'r' to move onto the next level and 't' to go back a level. If you would like to swtich back into normal mode, press 's'. To go into invinsible mode while keeping survival controls press 'i', to become mortal again press 'l'. * note you cannot skip the tutorial using 'r'.", {
                 width: 275,
                 size: 15,
+                font: UI_FONT,
             })
         ])
 
@@ -161,7 +197,7 @@ scene("game", ({ levelIdx, score }) => {
             pos(250, 75),
             text("TUTORIAL",{
                 size: 12,
-                font: "sinko",}
+                font: UI_FONT,}
                 )
             
         ])
@@ -170,14 +206,14 @@ scene("game", ({ levelIdx, score }) => {
             pos(200, 100),
             text("press the right arrow key to move right.",{
                 size: 12,
-                font: "sinko",})
+                font: UI_FONT,})
         ])
 
         add([
             pos(200, 125),
             text("press the left arrow key to move left.",{
                 size: 12,
-                font: "sinko",})
+                font: UI_FONT,})
         ])
 
 
@@ -185,7 +221,7 @@ scene("game", ({ levelIdx, score }) => {
             pos(200, 150),
             text("Press the space key in order to jump",{
                 size: 12,
-                font: "sinko",})
+                font: UI_FONT,})
         ])
 
         add([
@@ -193,7 +229,7 @@ scene("game", ({ levelIdx, score }) => {
             text("This is a furnace. Make sure not to touch it or you will burn to death! Jump over the furnace in order to dodge it", {
                 width: 400,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             })
         ])
 
@@ -202,7 +238,7 @@ scene("game", ({ levelIdx, score }) => {
             text("AAAHH, its a child! Did you know 96% of pretzel fatalities are due to small children. Dodge the hungry evil spooky beasts in order to live.", {
                 width: 400,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             })
         ])
 
@@ -211,7 +247,7 @@ scene("game", ({ levelIdx, score }) => {
             text("These are your salt friends. In order to leave the bakery you must collect all the salt. Make sure to not leave anyone behind: it's bad luck!", {
                 width: 400,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             })
         ])
 
@@ -220,7 +256,7 @@ scene("game", ({ levelIdx, score }) => {
             text("This is the mustard powerup. Collect it in order to gain a boost in speed.", {
                 width: 400,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             })
         ])
 
@@ -229,7 +265,7 @@ scene("game", ({ levelIdx, score }) => {
             text("This is the ketchup powerup. Collect it in order to boost your jump height.", {
                 width: 400,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             })
         ])
 
@@ -238,7 +274,7 @@ scene("game", ({ levelIdx, score }) => {
             text("Touch the portal to escape the bakery. Remeber, you need to collect all your salt friends!", {
                 width: 400,
                 size: 12,
-                font: "sinko",
+                font: UI_FONT,
             })
         ])
     }
@@ -248,114 +284,128 @@ scene("game", ({ levelIdx, score }) => {
 
 
     // Use the level passed, or first level
-    const level = addLevel(LEVELS[levelIdx || 0], {
-        width: 64,
-        height: 64,
-        pos: vec2(100, 200),
+    addLevel(levelLayout, {
+        tileWidth,
+        tileHeight,
+        pos: levelOrigin,
+        tiles: {
+            "=": () => [
+                sprite("floor"),
+                scale(FLOOR_SCALE),
+                anchor("bot"),
+                "floor",
+            ],
+            "$": () => [
+                sprite("salt"),
+                scale(.175),
+                pos(0, -10),
+                area(),
+                anchor("bot"),
+                "coin",
+            ],
+            "^": () => [
+                sprite("stove"),
+                scale(.2),
+                area({
+                    width: 142,
+                    height: 100,
+                }),
+                pos(0, -10),
+                anchor("bot"),
+                "danger",
+                "stove",
+            ],
+            ">": () => [
+                sprite("portal"),
+                scale(.4),
+                pos(0, -5),
+                area(),
+                anchor("bot"),
+                "portal",
+            ],
+            ".": () => [
+                sprite("ketchup"),
+                scale(.45),
+                pos(0, -10),
+                area(),
+                anchor("bot"),
+                "power",
+                "ketchup",
+            ],
+            ",": () => [
+                sprite("mustard"),
+                scale(.45),
+                pos(0, -10),
+                area(),
+                anchor("bot"),
+                "power",
+                "mustard",
+            ],
+            "+": () => [
+                sprite("children"),
+                scale(.15),
+                area({
+                    width: 120,
+                    height: 275,
+                }),
+                pos(0, -10),
+                anchor("bot"),
+                "children",
+                "danger",
+                {
+                    speed: CHILD_SPEED,
+                },
+            ],
+            "|": () => [
+                sprite("invis-wall"),
+                scale(.3),
+                anchor("bot"),
+                opacity(.1),
+                "invis-wall",
+            ],
+        },
+    })
 
-
-        "@": () => [
-            sprite("pretzel"),
-            scale(1.1),
-            area(),
-            body(),
-            origin("bot"),
-            "player",
-        ],
-        "=": () => [
-            sprite("floor"),
-            scale(.62),
-            area(),
-            solid(),
-            origin("bot"),
-            'floor',
-
-        ],
-        "$": () => [
-            sprite("salt"),
-            scale(.175),
-            pos(0, -10),
-            area(),
-            origin("bot"),
-            "coin",
-        ],
-        "^": () => [
-            sprite("stove"),
-            scale(.2),
-            area({
-                width: 142,
-                height: 100,
-            }),
-            pos(0, -10),
-            origin("bot"),
-            "danger",
-            "stove",
-        ],
-        ">": () => [
-            sprite("portal"),
-            scale(.4),
-            pos(0, -5),
-            area(),
-            origin("bot"),
-            "portal",
-        ],
-        ".": () => [
-            sprite("ketchup"),
-            scale(.45),
-            pos(0, -10),
-            area(),
-            origin("bot"),
-            "power",
-            'ketchup',
-        ],
-        ",": () => [
-            sprite("mustard"),
-            scale(.45),
-            pos(0, -10),
-            area(),
-            origin("bot"),
-            "power",
-            'mustard'
-        ],
-        "+": () => [
-            sprite("children"),
-            scale(.15),
-            area({
-                width: 120,
-                height: 275,
-            }),
-            pos(0, -10),
-            // solid(),
-            origin("bot"),
-            "children",
-            "danger",
-            {
-                speed: CHILD_SPEED
+    currentLevel.forEach((rowText, row) => {
+        ;[...rowText].forEach((tile, col) => {
+            if (tile === "=" || tile === "|") {
+                spawnStaticCollider(col, row, tile === "=" ? "floor" : "invis-wall")
             }
-        ],
-        "|": () => [
-            sprite("invis-wall"),
-            scale(.3),
-            area(),
-            origin("bot"),
-            opacity(.1),
-            'invis-wall',
-        ],
+        })
     })
 
 
 
-    // Get the player object from tag
-    const player = get("player")[0]
+    const player = add([
+        rect(PLAYER_BODY_WIDTH, PLAYER_BODY_HEIGHT),
+        pos(
+            levelOrigin.x + spawnCol * tileWidth + tileWidth / 2,
+            levelOrigin.y + (spawnRow + 1) * tileHeight,
+        ),
+        area(),
+        body(),
+        anchor("bot"),
+        opacity(0),
+        "player",
+    ])
+
+    const playerSprite = player.add([
+        sprite("pretzel"),
+        scale(PLAYER_SPRITE_SCALE),
+        anchor("bot"),
+        pos(0, 0),
+    ])
+
+    playerSprite.play("idle")
 
 
     onKeyPress("r", () => {
-        if (INVINSIBLE == "true" && levelIdx > 0) {
+        if (INVINSIBLE == "true" && currentLevelIdx > 0 && currentLevelIdx < LEVELS.length - 1) {
             JUMP = NJUMP
             SPEED = NSPEED
-            checkpoint = checkpoint + 1
+            checkpoint = Math.min(checkpoint + 1, LEVELS.length - 1)
             go("game", {
-                levelIdx: levelIdx + 1,
+                levelIdx: currentLevelIdx + 1,
                 score: 0,
             })
 
@@ -363,12 +413,12 @@ scene("game", ({ levelIdx, score }) => {
     })
 
     onKeyPress("t", () => {
-        if (INVINSIBLE == "true" && levelIdx > 1) {
+        if (INVINSIBLE == "true" && currentLevelIdx > 1) {
             JUMP = NJUMP
             SPEED = NSPEED
-            checkpoint = checkpoint - 1
+            checkpoint = Math.max(checkpoint - 1, 1)
             go("game", {
-                levelIdx: levelIdx - 1,
+                levelIdx: currentLevelIdx - 1,
                 score: 0,
             })
 
@@ -383,53 +433,84 @@ scene("game", ({ levelIdx, score }) => {
         INVINSIBLE = "false"
     })
 
-    var leftCancel = () => { };
-    var rightCancel = () => { };
-    var spaceCancel = () => { };
-    var upCancel = () => { };
-    var downCancel = () => { };
+    let leftControl = null
+    let rightControl = null
+    let spaceControl = null
+    let upControl = null
+    let downControl = null
 
+    function clearMovementControls() {
+        leftControl?.cancel()
+        rightControl?.cancel()
+        spaceControl?.cancel()
+        upControl?.cancel()
+        downControl?.cancel()
+        leftControl = null
+        rightControl = null
+        spaceControl = null
+        upControl = null
+        downControl = null
+    }
 
+    function registerNormalControls() {
+        clearMovementControls()
 
-    // Initial Set up idk how to get this to work without it
-    if (start1 == "true") {
-        gravity(2400)
-        INVINSIBLE = "false";
-        leftCancel();
-        rightCancel();
-        spaceCancel();
-        upCancel();
-        downCancel();
-
-        spaceCancel = onKeyPress("space", () => {
+        spaceControl = onKeyPress("space", () => {
             if (player.isGrounded()) {
                 player.jump(JUMP)
             }
         })
 
-        leftCancel = onKeyDown("left", () => {
+        leftControl = onKeyDown("left", () => {
             player.move(-SPEED, 0)
-            player.flipX(true)
+            playerSprite.flipX = true
 
-            if (player.curAnim() !== "run") {
-                player.play("run")
+            if (playerSprite.curAnim() !== "run") {
+                playerSprite.play("run")
             }
         })
 
-        rightCancel = onKeyDown("right", () => {
+        rightControl = onKeyDown("right", () => {
             player.move(SPEED, 0)
-            player.flipX(false)
-            if (player.curAnim() !== "run") {
-                player.play("run")
+            playerSprite.flipX = false
+            if (playerSprite.curAnim() !== "run") {
+                playerSprite.play("run")
             }
         })
+    }
+
+    function registerGodModeControls() {
+        clearMovementControls()
+
+        leftControl = onKeyDown("left", () => {
+            player.move(-SPEEDC, 0)
+        })
+
+        rightControl = onKeyDown("right", () => {
+            player.move(SPEEDC, 0)
+        })
+
+        downControl = onKeyDown("down", () => {
+            player.move(0, SPEEDC)
+        })
+
+        upControl = onKeyDown("up", () => {
+            player.move(0, -SPEEDC)
+        })
+    }
 
 
+
+    // Initial Set up idk how to get this to work without it
+    if (start1 == "true") {
+        setGravity(2400)
+        INVINSIBLE = "false";
+        registerNormalControls()
     }
 
     onKeyRelease(["left", "right"], () => {
-        if (!isKeyDown("left") && !isKeyDown("right")) {
-            player.play("idle")
+        if (!isKeyDown("left") && !isKeyDown("right") && playerSprite.curAnim() !== "idle") {
+            playerSprite.play("idle")
         }
     })
 
@@ -437,68 +518,16 @@ scene("game", ({ levelIdx, score }) => {
 
 
     onKeyPress("s", () => {
-        gravity(2400)
+        setGravity(2400)
         INVINSIBLE = "false"
-        leftCancel();
-        rightCancel();
-        spaceCancel();
-        upCancel();
-        downCancel();
-
-        spaceCancel = onKeyPress("space", () => {
-            if (player.isGrounded()) {
-                player.jump(JUMP)
-            }
-        })
-
-        leftCancel = onKeyDown("left", () => {
-            player.move(-SPEED, 0)
-            player.flipX(true)
-            if (player.curAnim() !== "run") {
-                player.play("run")
-            }
-        })
-
-        rightCancel = onKeyDown("right", () => {
-            player.move(SPEED, 0)
-            player.flipX(false)
-            if (player.curAnim() !== "run") {
-                player.play("run")
-            }
-        })
-        onKeyRelease(["left", "right"], () => {
-            if (!isKeyDown("left") && !isKeyDown("right")) {
-                player.play("idle")
-            }
-        })
+        registerNormalControls()
     })
 
     //creative
     onKeyPress("c", () => {
-        gravity(0)
+        setGravity(0)
         INVINSIBLE = "true"
-        leftCancel();
-        rightCancel();
-        spaceCancel();
-        upCancel();
-        downCancel();
-        leftCancel = onKeyDown("left", () => {
-            player.move(-SPEEDC, 0)
-
-        })
-
-        rightCancel = onKeyDown("right", () => {
-            player.move(SPEEDC, 0)
-        })
-
-        downCancel = onKeyDown("down", () => {
-            player.move(0, SPEEDC)
-        })
-
-        upCancel = onKeyDown("up", () => {
-            player.move(0, -SPEEDC)
-        })
-
+        registerGodModeControls()
         player.move(0, -100)
 
     })
@@ -518,7 +547,6 @@ scene("game", ({ levelIdx, score }) => {
 
     player.onCollide("children", () => {
         if (INVINSIBLE == "false") {
-            player.pos = level.getPos(0, 0)
             go("lose")
             death = "You have been gobbled up by a child"
         }
@@ -526,7 +554,6 @@ scene("game", ({ levelIdx, score }) => {
 
     player.onCollide("stove", () => {
         if (INVINSIBLE == "false") {
-            player.pos = level.getPos(0, 0)
             go("lose")
             death = "You have burned in the inferno humans call stove"
         }
@@ -566,23 +593,23 @@ scene("game", ({ levelIdx, score }) => {
             go("lose")
         }
         else if (score >= 5) {
-            if (levelIdx < LEVELS.length - 1 && levelIdx != 0) {
+            if (currentLevelIdx < LEVELS.length - 1 && currentLevelIdx != 0) {
                 // If there's a next level, go() to the same scene but load the next level
                 SPEED = NSPEED,
                     JUMP = NJUMP,
                     
-                    checkpoint = checkpoint + 1
+                    checkpoint = Math.min(checkpoint + 1, LEVELS.length - 1)
                     
 
                     go("game", {
-                        levelIdx: levelIdx + 1,
+                        levelIdx: currentLevelIdx + 1,
                         score: 0,
                     })
-            } else if(levelIdx < 1){
+            } else if (currentLevelIdx < 1) {
                 SPEED = NSPEED,
                 JUMP = NJUMP,
                     go("game", {
-                        levelIdx: levelIdx + 1,
+                        levelIdx: currentLevelIdx + 1,
                         score: 0,
                     })
             }else 
@@ -616,7 +643,7 @@ scene("lose", () => {
     add([
         text(death + ". Press 'space' to respawn or 'p' to go do Tutorial", {
             size: 50,
-            font: "sink",
+            font: UI_FONT,
             width: 1000,
         }),
         pos(200, 200),
@@ -635,7 +662,7 @@ scene("win", () => {
             size: 50,
         }),
         pos(650, 300),
-        origin("center"),
+        anchor("center"),
         color(300,300,100),
     ])
 
@@ -659,7 +686,7 @@ function respawn() {
 
      
         go("game", {
-            levelIdx: checkpoint,
+            levelIdx: Math.max(1, Math.min(checkpoint, LEVELS.length - 1)),
             score: 0,
         })
       
@@ -686,18 +713,18 @@ scene("title", () => {
     addButton("Tutorial", vec2(650,350), () => go('game', {levelIdx: 0, score: 0}) )
 	add([
 		pos(650, 150),
-		origin("center"),
+		anchor("center"),
 		color(300,100,200),
 		text("Pretzel Escape", {
 			size: 100,
-			font: "sinko",
+			font: UI_FONT,
 		})
 	])
 
 	add([
 		sprite("pretzel"),
 		scale(3),
-		origin("center"),
+		anchor("center"),
 		pos(650, 500),
 		"beggining",
 
@@ -723,7 +750,7 @@ function addButton(txt, p, f) {
 
 	const btn = add([
 		text(txt,{
-            font:"sinko",
+            font: UI_FONT,
             size: 30,
 
 
@@ -731,7 +758,7 @@ function addButton(txt, p, f) {
 		pos(p),
 		area({ cursor: "pointer", }),
 		scale(1),
-		origin("center"),
+		anchor("center"),
 	])
 
 	btn.onClick(f)
@@ -747,7 +774,7 @@ function addButton(txt, p, f) {
 			btn.scale = vec2(1.2)
 		} else {
 			btn.scale = vec2(1)
-			btn.color = rgb()
+			btn.color = rgb(255, 255, 255)
 		}
 	})
 
